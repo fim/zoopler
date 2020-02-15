@@ -214,9 +214,12 @@ def search(
     }
     if not houses:
         return
-    num_results = int(
-        html.find("span", class_="search-refine-filters-heading-count").string
-    )
+    try:
+        num_results = int(
+            html.find("span", class_="search-refine-filters-heading-count").string
+        )
+    except Exception as e:
+        raise click.BadParameter(f"Location '{location}' is not valid and returned no results")
     logger.info(f"Search returned {num_results} houses")
     logger.debug(
         f"Parsing {html.find_all('span', class_='listing-results-utils-count')[0].string}"
