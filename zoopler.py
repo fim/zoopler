@@ -188,11 +188,30 @@ def parse_house_url(house):
     help="Radius in miles",
 )
 @click.option("-j", "--jobs", default=32, type=int, help="Max workers")
+@click.option("-d", "--days", default=60, type=int, help="Max days since last update")
+@click.option(
+    "-t",
+    "--type",
+    "house_type",
+    default=None,
+    type=click.Choice(["house", "flat"]),
+    help="Filter properties of specific type",
+)
 @click.option("-s", "--sort", default="last_updated", help="Sorting field")
 @click.option("--json", "fjson", is_flag=True, default=False, help="Output in json")
 @click.argument("location")
 def search(
-    location, min_price, max_price, min_beds, max_beds, radius, jobs, sort, fjson
+    location,
+    min_price,
+    max_price,
+    min_beds,
+    max_beds,
+    radius,
+    jobs,
+    sort,
+    fjson,
+    days,
+    house_type,
 ):
     custom_params = {}
     custom_params["q"] = location
@@ -219,7 +238,9 @@ def search(
             html.find("span", class_="search-refine-filters-heading-count").string
         )
     except Exception as e:
-        raise click.BadParameter(f"Location '{location}' is not valid and returned no results")
+        raise click.BadParameter(
+            f"Location '{location}' is not valid and returned no results"
+        )
     logger.info(f"Search returned {num_results} houses")
     logger.debug(
         f"Parsing {html.find_all('span', class_='listing-results-utils-count')[0].string}"
@@ -247,6 +268,28 @@ def search(
     logger.debug(f"parsed {len(houses)} urls")
     executor = ThreadPoolExecutor(max_workers=jobs)
     results = tuple(executor.map(parse_house_url, houses))
+    if house_type:
+        logger.info(f"Filtering out entries older than {days} days")
+        results = filter(
+            lambda r: r["property_type"] == house_type
+            if house_type == "flat"
+            else r["property_type"] != "flat",
+            results,
+        )
+
+    if days:
+        logger.info(f"Filtering out entries older than {days} days")
+        results = filter(
+            lambda r: (
+                datetime.datetime.now()
+                - datetime.datetime.fromtimestamp(r["last_updated"])
+            ).days
+            < days
+            if r["last_updated"]
+            else False,
+            results,
+        )
+
     if sort:
         results = sorted(
             results, key=lambda x: x[sort] if x[sort] and x[sort] != "NA" else 999999999
